@@ -1,10 +1,11 @@
 import re
 
 from pyparsing import (Word, Literal, OneOrMore, Regex, StringEnd, FollowedBy, Suppress, Optional, White,
-                       alphas, alphanums, Keyword, QuotedString, infixNotation, opAssoc, nums)
+                       alphas, alphanums, Keyword, QuotedString, infixNotation, opAssoc, nums, pyparsing_common,
+                       Combine)
 
-and_kw, or_kw, around_kw = map(lambda x: Keyword(x, caseless=False), ['AND', 'OR', 'AROUND'])
-reserved_words = (and_kw | or_kw | around_kw)
+and_kw, or_kw, around_kw, star_kw = map(lambda x: Keyword(x, caseless=False), ['AND', 'OR', 'AROUND', '*'])
+reserved_words = (and_kw | or_kw | around_kw | star_kw)
 any_tag = Word(alphas) + FollowedBy(':')
 word = ~reserved_words + Regex(r'\b[^-"\s()*|:]+\b', flags=re.UNICODE)
 simple_query = OneOrMore(word)
@@ -38,16 +39,28 @@ in_cache = (tag('cache') + Suppress(':') + domain_name + simple_query).setParseA
 })
 
 raw_text = Regex(r'\S+')
+number = Regex(r'[+-]?\d+(\.\d+)?')
+price = Combine(Literal('$') + number)
+
+
+def add_range(values):
+    return {'tag': 'range',
+            'start': values[0],
+            'end': values[1]}
+
+
+num_range = (number + FollowedBy('..') + Suppress('..') + number).setParseAction(add_range)
+price_range = (price + FollowedBy('..') + Suppress('..') + price).setParseAction(add_range)
 
 in_anchor, in_text, int_title, in_url = map(lambda name: parse_tag(name, raw_text | quoted_string),
                                             ['inanchor', 'intext', 'intitle', 'inurl'])
 
 tags = (in_site | file_type | related | in_anchor | in_text | int_title | in_url)
-token = (tags | word | quoted_string)
+token = (star_kw | price_range | price | num_range | number | tags | word | quoted_string)
 query = infixNotation(token, [
-    (and_kw | White(), 2, opAssoc.LEFT),
+    (around_kw + Suppress('(') + Word(nums) + Suppress(')'), 2, opAssoc.LEFT),
     (or_kw, 2, opAssoc.LEFT),
-    (around_kw + Suppress('(') + Word(nums) + Suppress(')'), 2, opAssoc.LEFT)
+    (Optional(and_kw, default='AND'), 2, opAssoc.LEFT),
 ])
 
 
