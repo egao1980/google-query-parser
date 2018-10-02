@@ -81,4 +81,4 @@ search_query = all_in_query | in_cache | query
 
 
 def parse(query):
-    return simple_query.parseString(query, True)
+    return search_query.parseString(query, True)
